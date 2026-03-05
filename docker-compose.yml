@@ -36,6 +36,7 @@ services:
     env_file: .env
     volumes:
       - shared-data:/app/data
+      - ./bot_service/config:/app/bot_config:ro
     healthcheck:
       test: ["CMD", "test", "-f", "/app/data/intel_heartbeat"]
       interval: 30s
