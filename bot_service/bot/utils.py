@@ -33,6 +33,7 @@ def get_next_bid(current_price: int) -> int:
         if next_in_bracket <= high:
             return next_in_bracket
         # overflow to next bracket
+        # (only reachable for 50k-100k boundary → 100000+500 handled by top bracket)
         return high + step if high == 100_000 else low + step
     return current_price + 1_000
 

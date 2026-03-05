@@ -56,7 +56,7 @@ class CalendarEngine:
         # PEAK_SELL: Thursday 18:00 – Friday 16:00 UTC (inclusive of Fri 16:00)
         if weekday == THU and t >= time(18, 0):
             return MarketPhase.PEAK_SELL
-        if weekday == FRI and t <= time(16, 0):
+        if weekday == FRI and t < time(17, 0):
             return MarketPhase.PEAK_SELL
 
         # PROMO_DROP: Friday 17:00–20:00 UTC

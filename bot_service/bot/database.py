@@ -208,14 +208,16 @@ class Database:
         return row["n"] if row else 0
 
     def get_hourly_action_count(self, action_type: str) -> int:
-        """Return count for this action_type in the current hour from rate_state."""
+        """Return the current hour's action count for action_type. Pure read — no side effects."""
         state = self.get_rate_state(action_type)
         if state is None:
             return 0
         now = datetime.now(timezone.utc)
         # hour_reset_at is start of current window; window is [hour_reset_at, hour_reset_at+1h)
-        if state.hour_reset_at is not None and now >= state.hour_reset_at + timedelta(hours=1):
-            return 0
+        if state.hour_reset_at is not None :
+            next_reset = state.hour_reset_at.replace(minute=0, second=0, microsecond=0) + timedelta(hours=1)
+            if now >= next_reset:
+                return 0
         return state.count_hour
 
     def update_rate_state(self, action_type: str) -> None:

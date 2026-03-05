@@ -64,8 +64,12 @@ class TestPhaseBoundaries:
     def test_thursday_1800_peak_sell(self, engine: CalendarEngine) -> None:
         assert engine.get_current_phase() == MarketPhase.PEAK_SELL
 
-    @freeze_time("2025-03-07 15:00:00+00:00")  # Friday 15:00 -> still peak sell (until 17:00)
+    @freeze_time("2025-03-07 15:00:00+00:00")  # Friday 15:00 -> still peak sell (boundary is 16:00 / 17:00)
     def test_friday_1500_peak_sell(self, engine: CalendarEngine) -> None:
+        assert engine.get_current_phase() == MarketPhase.PEAK_SELL
+
+    @freeze_time("2025-03-07 16:30:00+00:00")  # Friday 16:30 -> should be PEAK_SELL, not STANDARD
+    def test_friday_1630_peak_sell_gap(self, engine: CalendarEngine) -> None:
         assert engine.get_current_phase() == MarketPhase.PEAK_SELL
 
     @freeze_time("2025-03-07 20:00:00+00:00")  # Friday 20:00 -> weekend buy

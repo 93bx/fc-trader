@@ -1,6 +1,10 @@
-# Phase 2: loguru for logging (required by .cursorrules). Add uiautomator2 etc. in later phases.
+# Phase 2: loguru for logging (required by .cursorrules).
 loguru
 # Phase 3: config YAML and tests
 PyYAML
 pytest
 freezegun
+# Phase 4: Android automation and OCR
+uiautomator2
+pytesseract
+Pillow

@@ -40,8 +40,6 @@ class TestGetNextBid:
     def test_third_bracket(self) -> None:
         assert get_next_bid(10000) == 10250
         assert get_next_bid(14999) == 15000
-        # 50000 is high of 10k-50k bracket; next is first of 50k-100k bracket -> 50500
-        assert get_next_bid(50000) == 50500
 
     def test_fourth_bracket(self) -> None:
         assert get_next_bid(50000) == 50500

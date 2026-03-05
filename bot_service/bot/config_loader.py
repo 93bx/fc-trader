@@ -39,7 +39,8 @@ class EmulatorConfig:
 
     avd_name: str = "fc_trader_avd"
     avd_port: int = 5554
-
+    boot_timeout: int = 180
+    headless: bool = True
 
 @dataclass
 class AntiDetectConfig:
@@ -156,6 +157,8 @@ def _build_nested(raw: dict) -> Config:
         emulator=EmulatorConfig(
             avd_name=emu.get("avd_name", "fc_trader_avd"),
             avd_port=emu.get("avd_port", 5554),
+            boot_timeout=int(emu.get("boot_timeout", 180)),
+            headless=bool(emu.get("headless", True)),
         ),
         anti_detect=AntiDetectConfig(
             action_delay_min=float(ad.get("action_delay_min", 0.3)),
@@ -208,7 +211,7 @@ def _validate(cfg: Config) -> None:
                 "config password is missing or still set to example value; set FC_PASSWORD or password in config"
             )
 
-    allowed = ("auto", "sniper", "mass_bidder", "chem_style")
+    allowed = ("auto", "sniper", "mass_bidder", "chem_style", "peak_sell")
     if cfg.active_strategy not in allowed:
         raise ConfigError(f"config active_strategy must be one of {allowed}, got {cfg.active_strategy!r}")
 
