@@ -1,11 +1,16 @@
 FROM budtmo/docker-android:emulator_13.0
 USER root
-RUN apt-get update -qq && apt-get install -y -qq \
-    python3.11 python3.11-pip \
-    tesseract-ocr tesseract-ocr-eng \
-    libgl1 libglib2.0-0 libsm6 libxext6 libxrender1 \
-    sqlite3 curl \
+RUN apt-get update -qq && apt-get install -y -qq software-properties-common \
+    && add-apt-repository -y ppa:deadsnakes/ppa \
+    && apt-get update -qq \
+    && apt-get install -y -qq \
+        python3.11 python3.11-venv python3.11-distutils \
+        tesseract-ocr tesseract-ocr-eng \
+        libgl1 libglib2.0-0 libsm6 libxext6 libxrender1 \
+        sqlite3 curl \
     && rm -rf /var/lib/apt/lists/*
+RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.11 \
+    && rm -f get-pip.py
 WORKDIR /app
 COPY requirements.txt .
 RUN python3.11 -m pip install --no-cache-dir -r requirements.txt
