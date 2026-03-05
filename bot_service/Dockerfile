@@ -16,4 +16,5 @@ COPY . /app/
 RUN mkdir -p /app/logs /app/apk /app/data
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONPATH=/app
-CMD ["python3.11", "main.py"]
+ENTRYPOINT ["python3.11", "main.py"]
+CMD []
