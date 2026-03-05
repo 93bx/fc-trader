@@ -8,7 +8,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from bot.config_loader import RateLimiterConfig
+from bot.config_loader import DatabaseConfig, RateLimiterConfig
 from bot.database import Database
 from bot.rate_limiter import ActionType, RateLimiter
 
@@ -16,7 +16,7 @@ from bot.rate_limiter import ActionType, RateLimiter
 @pytest.fixture
 def db() -> Database:
     """In-memory SQLite database for tests."""
-    d = Database({"path": ":memory:"})
+    d = Database(DatabaseConfig(path=":memory:"))
     d.init()
     return d
 

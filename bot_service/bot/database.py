@@ -7,6 +7,7 @@ from typing import List, Optional
 
 from loguru import logger
 
+from bot.config_loader import DatabaseConfig
 from bot.models import (
     MarketPrice,
     PortfolioItem,
@@ -90,9 +91,9 @@ def _iso_to_dt(iso: Optional[str]) -> Optional[datetime]:
 class Database:
     """SQLite wrapper for FC Trader. All queries and schema live here."""
 
-    def __init__(self, cfg: dict) -> None:
-        """Open or create DB at path from config (e.g. cfg['path'] or cfg['db_path'])."""
-        path = cfg.get("path") or cfg.get("db_path", "/app/data/fc_trader.db")
+    def __init__(self, cfg: DatabaseConfig) -> None:
+        """Open or create DB at path from config."""
+        path = cfg.path
         self._path = Path(path)
         self._path.parent.mkdir(parents=True, exist_ok=True)
         self._conn: Optional[sqlite3.Connection] = None
