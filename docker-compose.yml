@@ -1,0 +1,53 @@
+services:
+  fc-trader:
+    build: ./bot_service
+    image: fc-trader:latest
+    container_name: fc-trader
+    privileged: true
+    devices:
+      - /dev/kvm:/dev/kvm
+    mem_limit: 4g
+    cpus: "4"
+    env_file: .env
+    volumes:
+      - ./bot_service/config:/app/config
+      - ./logs:/app/logs
+      - ./apk:/app/apk
+      - shared-data:/app/data
+    healthcheck:
+      test: ["CMD", "test", "-f", "/app/data/heartbeat"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    logging:
+      driver: json-file
+      options:
+        max-size: 50m
+        max-file: "5"
+    restart: unless-stopped
+
+  intel:
+    build: ./intel_service
+    image: fc-trader-intel:latest
+    container_name: fc-trader-intel
+    mem_limit: 256m
+    cpus: "0.5"
+    env_file: .env
+    volumes:
+      - shared-data:/app/data
+    healthcheck:
+      test: ["CMD", "test", "-f", "/app/data/intel_heartbeat"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: 50m
+        max-file: "5"
+    restart: unless-stopped
+
+volumes:
+  shared-data:
