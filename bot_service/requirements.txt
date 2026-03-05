@@ -1,2 +1,6 @@
 # Phase 2: loguru for logging (required by .cursorrules). Add uiautomator2 etc. in later phases.
 loguru
+# Phase 3: config YAML and tests
+PyYAML
+pytest
+freezegun

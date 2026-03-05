@@ -1,7 +1,7 @@
 """All SQLite access for FC Trader. Schema, parameterised queries, and Database class."""
 
 import sqlite3
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import List, Optional
 
@@ -213,7 +213,8 @@ class Database:
         if state is None:
             return 0
         now = datetime.now(timezone.utc)
-        if state.hour_reset_at is not None and now >= state.hour_reset_at:
+        # hour_reset_at is start of current window; window is [hour_reset_at, hour_reset_at+1h)
+        if state.hour_reset_at is not None and now >= state.hour_reset_at + timedelta(hours=1):
             return 0
         return state.count_hour
 
@@ -237,19 +238,19 @@ class Database:
             conn.commit()
             return
 
-        # Reset hour if we passed hour_reset_at; else keep existing window
+        # Reset hour if we passed the current window (hour_reset_at is start of window)
         hour_reset = state.hour_reset_at
         day_reset = state.day_reset_at
         count_today = state.count_today
         count_hour = state.count_hour
 
-        if hour_reset is not None and now >= hour_reset:
+        if hour_reset is not None and now >= hour_reset + timedelta(hours=1):
             count_hour = 1
             hour_reset = now.replace(minute=0, second=0, microsecond=0)
         else:
             count_hour += 1
 
-        if day_reset is not None and now >= day_reset:
+        if day_reset is not None and now >= day_reset + timedelta(days=1):
             count_today = 1
             day_reset = now.replace(hour=0, minute=0, second=0, microsecond=0)
         else:
@@ -440,8 +441,8 @@ class Database:
         conn.commit()
 
     def close(self) -> None:
-    """Close the SQLite connection if open. Call this in tests and on shutdown."""
-    if self._conn is not None:
-        self._conn.close()
-        self._conn = None
-        logger.debug("Database connection closed")
+        """Close the SQLite connection if open. Call this in tests and on shutdown."""
+        if self._conn is not None:
+            self._conn.close()
+            self._conn = None
+            logger.debug("Database connection closed")
