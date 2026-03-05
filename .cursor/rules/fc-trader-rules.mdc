@@ -1,0 +1,404 @@
+---
+alwaysApply: true
+---
+
+# ============================================================================
+# FC TRADER — CURSOR PROJECT RULES
+# EA Sports FC 26 Companion Android Trading Bot
+# ============================================================================
+# These rules govern every file the agent writes in this project.
+# Read ALL sections before generating any code.
+# ============================================================================
+
+
+# ── 1. PROJECT IDENTITY ──────────────────────────────────────────────────────
+
+You are building FC Trader: a fully automated trading bot for the EA Sports
+FC 26 Companion Android app. It runs inside Docker, spins up a headless
+Android emulator via AVD, installs the FC Companion APK, logs into EA,
+and executes three trading strategies (Sniper, Mass Bidder, Chemistry Style
+Trader) driven by a real-time market calendar and external market intelligence
+scraped from FUTWIZ, FUTBIN, and FUT.GG.
+
+The project has TWO Docker services:
+  1. fc-trader   — Python bot + Android emulator (heavy, KVM-backed)
+  2. intel       — Lightweight Python sidecar scraping market data
+
+They share a single named Docker volume (shared-data) containing a SQLite DB.
+
+
+# ── 2. REPOSITORY STRUCTURE (STRICT — DO NOT DEVIATE) ────────────────────────
+
+fc-trader/
+├── .cursorrules                         ← this file
+├── .env.example                         ← env var template, never real secrets
+├── .gitignore
+├── docker-compose.yml                   ← orchestrates both services
+├── README.md
+│
+├── bot_service/                         ── SERVICE 1 ──────────────────────────
+│   ├── Dockerfile
+│   ├── requirements.txt
+│   ├── main.py                          ← entry point ONLY, no logic here
+│   ├── config/
+│   │   └── config.yaml
+│   └── bot/
+│       ├── __init__.py
+│       ├── config_loader.py
+│       ├── emulator.py
+│       ├── device.py
+│       ├── auth.py
+│       ├── navigator.py
+│       ├── market.py
+│       ├── watchdog.py
+│       ├── rate_limiter.py
+│       ├── database.py
+│       ├── portfolio.py
+│       ├── calendar_engine.py
+│       └── strategies/
+│           ├── __init__.py
+│           ├── base.py
+│           ├── sniper.py
+│           ├── mass_bidder.py
+│           └── chem_style.py
+│
+├── intel_service/                       ── SERVICE 2 ──────────────────────────
+│   ├── Dockerfile
+│   ├── requirements.txt
+│   ├── main.py
+│   └── scrapers/
+│       ├── __init__.py
+│       ├── futwiz.py
+│       ├── futbin_graph.py
+│       ├── futgg_sbc.py
+│       ├── futdb.py
+│       └── intel_writer.py
+│
+└── docs/
+    ├── SETUP.md
+    ├── STRATEGIES.md
+    └── CALENDAR.md
+
+
+# ── 3. LANGUAGE & RUNTIME ────────────────────────────────────────────────────
+
+- Python 3.11 strictly (match the Docker base image version)
+- Type hints on EVERY function signature — parameters AND return type
+- No use of `Any` type unless genuinely unavoidable; always prefer specific types
+- f-strings only (no .format() or % formatting)
+- Dataclasses or TypedDicts for structured data (not plain dicts passed around)
+- Never use `global` variables — pass state explicitly
+- No `print()` anywhere — use loguru `logger` exclusively
+
+
+# ── 4. ARCHITECTURE RULES ────────────────────────────────────────────────────
+
+SEPARATION OF CONCERNS — each module has one job:
+  - emulator.py     → AVD process lifecycle only
+  - device.py       → raw UI interactions only (tap, swipe, OCR, screenshot)
+  - navigator.py    → FC app screen flows only (knows screen names, not logic)
+  - market.py       → search execution and listing scraping only
+  - strategies/     → buy/sell decision logic only (reads DB, calls device)
+  - calendar_engine → time/phase awareness only (no trading logic)
+  - database.py     → ALL SQLite queries live here (no SQL elsewhere)
+  - intel scrapers  → external HTTP fetching only (no business logic)
+
+NEVER mix layers. A strategy must not call `device.py` directly — it must
+go through `navigator.py`. A scraper must not write to DB directly — it
+must return data to `intel_writer.py`.
+
+DEPENDENCY DIRECTION (strict, no circular imports):
+  main.py → strategies → navigator → device → emulator
+  main.py → calendar_engine
+  main.py → rate_limiter
+  strategies → database (read)
+  navigator → database (write trades)
+  intel scrapers → intel_writer → database (write prices)
+
+
+# ── 5. ANDROID / UIAUTOMATOR2 RULES ─────────────────────────────────────────
+
+- Always use uiautomator2 (u2) — never raw ADB shell commands for UI actions
+- All taps MUST include random pixel jitter: ±(anti_detect.tap_jitter_px)
+- All actions MUST be preceded by device._human_delay() — no bare time.sleep()
+  except inside _human_delay() itself
+- Element lookup order: resource-id first, then content-desc, then text, 
+  then XPath last (XPath is fragile across app versions)
+- ALWAYS use explicit waits (d.wait_element) — never fixed sleep after tap
+- Screenshot capture: use `device.screenshot()` not raw adb screencap
+- OCR price extraction: always strip commas and 'K' suffix before int conversion
+  e.g. "14,500" → 14500,  "14.5K" → 14500
+- After every Buy Now action: enforce rate_limiter.cooldown_after_buy()
+
+
+# ── 6. EA BUSINESS LOGIC RULES ───────────────────────────────────────────────
+
+These are facts about the FC 26 market. Never violate them:
+
+TAX:
+  net_received = sell_price * 0.95   # EA always takes 5%
+  profit = net_received - buy_price
+  roi_pct = (profit / buy_price) * 100
+
+BID INCREMENTS (EA enforces these — bids outside them are rejected):
+  200    – 1,000   → step 50
+  1,000  – 10,000  → step 100
+  10,000 – 50,000  → step 250
+  50,000 – 100,000 → step 500
+  100,000+         → step 1,000
+
+  Function get_next_bid(current: int) -> int must exist in bot/utils.py
+  and must be used everywhere a bid value is computed — never hardcode increments.
+
+TRANSFER LIST LIMIT: 100 active listings max. Bot must track this.
+TRANSFER TARGET LIMIT: 50 items on watch list.
+
+MIN VIABLE PRICES:
+  Never buy a card below 200 coins (EA floor).
+  Never list a card below 200 coins.
+
+
+# ── 7. STRATEGY RULES ────────────────────────────────────────────────────────
+
+All strategies must inherit from strategies/base.py BaseStrategy.
+BaseStrategy defines the interface:
+  - run_cycle() -> CycleResult
+  - should_buy(listing: Listing) -> bool
+  - calculate_profit(buy_price: int, sell_price: int) -> ProfitResult
+  - get_sell_price(player_name: str, db: Database) -> int
+
+SNIPER:
+  - ONLY uses Buy Now (never bids)
+  - Max buy price = FUTWIZ market price * (1 - min_profit_pct/100) / 0.95
+  - Lists at: FUTWIZ market price - 1 bid increment (undercut by minimum)
+  - Scan cycle: check rate limiter before every search
+
+MASS BIDDER:
+  - max_bid = (sell_price * 0.95) - desired_profit_coins
+  - Never bid above (BIN * 0.85) — leave room for profit
+  - After bidding, check won items every 30 minutes
+  - Relist all won items at BIN price from FUTWIZ
+
+CHEM STYLE TRADER:
+  - Only buy cards that already have Shadow or Hunter applied
+  - Buy threshold: price_with_chem < (futwiz_price_without_chem + chem_cost * 0.5)
+  - Means: card is priced as if unstyled despite having the chem style
+  - List at: futwiz_price_with_shadow or futwiz_price_with_hunter
+
+
+# ── 8. CALENDAR ENGINE RULES ─────────────────────────────────────────────────
+
+MarketPhase enum values (all must be handled in strategy_selector):
+  RIVALS_REWARDS    → Thursday 07:00–10:00 UTC
+  PROMO_DROP        → Friday 17:00–20:00 UTC
+  PEAK_SELL         → Thursday 18:00 – Friday 16:00 UTC
+  WEEKEND_BUY       → Friday 20:00 – Saturday 10:00 UTC
+  OVERNIGHT         → 00:00–07:00 UTC any day
+  MIDWEEK_DIP       → Wednesday all day UTC
+  SQUAD_BATTLES     → Sunday 07:00–10:00 UTC
+  STANDARD          → all other times
+
+Strategy selection map (this is the authoritative mapping):
+  RIVALS_REWARDS  → MassBidder
+  PROMO_DROP      → ChemStyleTrader
+  PEAK_SELL       → [sell/relist only, no buying]
+  WEEKEND_BUY     → Sniper
+  OVERNIGHT       → MassBidder
+  MIDWEEK_DIP     → Sniper + ChemStyleTrader (alternating cycles)
+  SQUAD_BATTLES   → MassBidder
+  STANDARD        → Sniper
+
+All times are UTC. calendar_engine.py must handle timezone conversion
+for config-defined EA promo events.
+
+Promo events (stored in config.yaml, not hardcoded):
+  When a promo is active: force MassBidder + Sniper (never ChemStyle during 
+  pack flood — too much supply of styled cards)
+
+
+# ── 9. DATABASE RULES ────────────────────────────────────────────────────────
+
+ALL SQL lives in bot/database.py. No SQL strings in any other file.
+Use parameterised queries exclusively — never f-string SQL.
+
+Schema is defined in database.py as a SCHEMA constant (multiline string).
+database.init() creates all tables if not exist — idempotent.
+
+Tables:
+  market_prices   ← written by intel sidecar, read by strategies
+  sbc_signals     ← written by intel sidecar, triggers fodder signals  
+  trades          ← written by navigator after every buy/sell
+  rate_state      ← written/read by rate_limiter
+  portfolio       ← written by portfolio.py after each trade
+
+Queries are methods on the Database class. Example:
+  db.get_market_price(player_name, platform) -> Optional[MarketPrice]
+  db.insert_trade(trade: Trade) -> None
+  db.get_portfolio_value() -> int
+
+
+# ── 10. INTEL SIDECAR RULES ──────────────────────────────────────────────────
+
+intel_service runs completely independently of bot_service.
+It has its own Dockerfile and requirements.txt.
+It only needs: requests, beautifulsoup4, APScheduler, loguru.
+
+Scraper schedule:
+  futwiz.py       → every 15 minutes
+  futbin_graph.py → every 30 minutes  
+  futgg_sbc.py    → every 10 minutes (SBCs can launch any time)
+  futdb.py        → every 60 minutes (fallback, rate-limited API)
+
+Scraper resilience rules:
+  - Every scraper is wrapped in try/except — one failure must never crash others
+  - If FUTWIZ returns no data: fall back to futdb.py
+  - If all sources fail: log WARNING, keep last known price in DB
+  - Never raise exceptions out of a scraper — return None and log
+
+Request headers for scrapers:
+  Always set a realistic User-Agent header (Chrome/Linux).
+  Add 2–5 second random delay between requests to the same domain.
+  Respect robots.txt for educational context.
+
+
+# ── 11. RATE LIMITER RULES ───────────────────────────────────────────────────
+
+RateLimiter is a singleton passed through the whole app (not imported globally).
+It persists state to the rate_state SQLite table so limits survive restarts.
+
+Hard limits (from config, these are the defaults):
+  max_searches_per_hour : 40
+  max_buys_per_hour     : 15
+  max_lists_per_hour    : 20
+  cooldown_after_buy    : 30 seconds
+  daily_trade_limit     : 100
+
+Every strategy MUST call rate_limiter.check_and_wait(ActionType.SEARCH) before
+searching, and rate_limiter.check_and_wait(ActionType.BUY) before buying.
+If limit reached: log WARNING and sleep until next hour window, don't crash.
+
+
+# ── 12. ERROR HANDLING & WATCHDOG ────────────────────────────────────────────
+
+watchdog.py must detect and recover from all known FC app failure states:
+
+  BID_LOCK:         Detected by: "Bid has changed" popup on screen
+                    Recovery: dismiss popup, wait 5s, retry
+
+  SESSION_EXPIRED:  Detected by: login screen appearing mid-session
+                    Recovery: call auth.login() again
+
+  APP_CRASH:        Detected by: screenshot shows home screen or black screen
+                    Recovery: relaunch app, re-navigate to transfer market
+
+  NETWORK_ERROR:    Detected by: "Connection Error" text on screen
+                    Recovery: wait 30s, retry up to 3 times
+
+  TRANSFER_FULL:    Detected by: "Transfer List Full" popup
+                    Recovery: log error, pause buying, alert via log
+
+Every recovery attempt is logged with the failure type and recovery action.
+After 3 consecutive failed recoveries: stop bot, log CRITICAL, exit gracefully.
+
+
+# ── 13. DOCKER RULES ─────────────────────────────────────────────────────────
+
+bot_service/Dockerfile:
+  Base image: budtmo/docker-android:emulator_13.0
+  Python: 3.11
+  Must install: tesseract-ocr, libgl1, libglib2.0-0, sqlite3
+  WORKDIR: /app
+  USER: root (required for KVM access)
+  CMD: ["python3", "main.py"]
+
+intel_service/Dockerfile:
+  Base image: python:3.11-slim  (no Android, keep it tiny)
+  WORKDIR: /app
+  CMD: ["python3", "main.py"]
+
+docker-compose.yml:
+  Both services share volume "shared-data" mounted at /app/data
+  bot_service has: devices: [/dev/kvm:/dev/kvm], privileged: true
+  intel starts before bot (depends_on not needed — DB init is idempotent)
+  All secrets via environment variables, never hardcoded
+  Healthcheck on both services
+
+
+# ── 14. CONFIGURATION RULES ──────────────────────────────────────────────────
+
+config.yaml is the SINGLE source of truth for all tuneable parameters.
+No magic numbers in code — every threshold, delay, limit must reference config.
+
+config_loader.py must:
+  - Load YAML
+  - Apply env var overrides for: FC_EMAIL, FC_PASSWORD, FC_STRATEGY, FC_LOG_LEVEL
+  - Validate required fields with clear error messages
+  - Return a typed Config dataclass (not a raw dict)
+
+.env.example must exist with all supported env vars and explanatory comments.
+.gitignore must exclude: .env, config/config.yaml, *.db, logs/, apk/
+
+
+# ── 15. LOGGING RULES ────────────────────────────────────────────────────────
+
+Use loguru exclusively. stdlib logging is forbidden.
+Format: "{time:HH:mm:ss} | {level:<8} | {module}:{line} | {message}"
+Levels:
+  DEBUG   → every UI action (tap coordinates, OCR result, element found)
+  INFO    → every strategy decision, every trade executed
+  WARNING → rate limit hit, scraper failure, watchdog recovery
+  ERROR   → failed buy/sell, login failure
+  CRITICAL → unrecoverable state, bot shutting down
+
+Every trade executed: log at INFO with full detail:
+  "BUY | {player} | {strategy} | paid={buy_price} | list_at={sell_price} | expected_profit={profit}"
+
+
+# ── 16. TESTING & SAFETY ─────────────────────────────────────────────────────
+
+DRY RUN MODE (--dry-run flag):
+  When active: all buy/sell actions are SIMULATED only
+  Tap sequence runs but stops before the final confirm tap
+  Log line prefixed with [DRY RUN] for every simulated action
+  All other logic (DB writes, rate limiting, OCR) runs normally
+
+Unit tests go in bot_service/tests/ and intel_service/tests/
+  test_profit_calculator.py  — test every edge case of EA tax math
+  test_bid_increments.py     — test get_next_bid() for every bracket
+  test_calendar_engine.py    — test every MarketPhase transition
+  test_rate_limiter.py       — test limit enforcement and reset logic
+
+pytest is the test runner. Tests must not require a running emulator.
+
+
+# ── 17. CODE STYLE ───────────────────────────────────────────────────────────
+
+- Black formatting (line length 100)
+- isort for import ordering (stdlib → third-party → local)
+- Docstring on every class and every public method (Google style)
+- Inline comments for non-obvious logic — especially EA business rules
+- No commented-out code in commits
+- No TODO comments — either implement it or create a GitHub issue reference
+
+Naming conventions:
+  Classes:    PascalCase
+  Functions:  snake_case
+  Constants:  UPPER_SNAKE_CASE
+  Files:      snake_case.py
+  Config keys: snake_case in YAML
+
+
+# ── 18. WHAT THE AGENT MUST NEVER DO ─────────────────────────────────────────
+
+- Never hardcode EA credentials anywhere
+- Never commit a real .env file or config.yaml with real credentials
+- Never use time.sleep() for waits inside UI automation (use explicit waits)
+- Never write SQL outside database.py
+- Never call device.py directly from a strategy (must go through navigator.py)
+- Never ignore an exception silently (bare `except: pass` is forbidden)
+- Never use a fixed pixel coordinate without a comment explaining what it targets
+- Never buy above the configured max_buy price for any player
+- Never exceed the daily_trade_limit — this is a hard stop
+- Never write to the shared SQLite DB from both services simultaneously
+  (intel_service writes to market_prices/sbc_signals only;
+   bot_service writes to trades/rate_state/portfolio only)
