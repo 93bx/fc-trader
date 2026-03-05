@@ -9,8 +9,6 @@ RUN apt-get update -qq && apt-get install -y -qq software-properties-common \
         libgl1 libglib2.0-0 libsm6 libxext6 libxrender1 \
         sqlite3 curl \
     && rm -rf /var/lib/apt/lists/*
-RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.11 \
-    && rm -f get-pip.py
 WORKDIR /app
 COPY requirements.txt .
 RUN python3.11 -m pip install --no-cache-dir -r requirements.txt
