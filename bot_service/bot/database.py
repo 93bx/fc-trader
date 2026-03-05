@@ -66,6 +66,7 @@ CREATE TABLE IF NOT EXISTS portfolio (
     player_name     TEXT NOT NULL,
     buy_price       INTEGER NOT NULL,
     listed_price    INTEGER,
+    sell_price      INTEGER,
     status          TEXT NOT NULL DEFAULT 'held',
     acquired_at     TEXT NOT NULL,
     listed_at       TEXT,
@@ -291,12 +292,13 @@ class Database:
         """Insert one portfolio item. Datetimes stored as ISO strings."""
         conn = self._get_conn()
         conn.execute(
-            "INSERT INTO portfolio (player_name, buy_price, listed_price, status, acquired_at, "
-            "listed_at, sold_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO portfolio (player_name, buy_price, listed_price, sell_price, status, acquired_at, "
+            "listed_at, sold_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 item.player_name,
                 item.buy_price,
                 item.listed_price,
+                item.sell_price,
                 item.status,
                 _dt_to_iso(item.acquired_at),
                 _dt_to_iso(item.listed_at) if item.listed_at else None,
@@ -316,7 +318,7 @@ class Database:
         conn = self._get_conn()
         if sold_at is not None and sell_price is not None:
             conn.execute(
-                "UPDATE portfolio SET status = ?, sold_at = ?, listed_price = ? WHERE id = ?",
+                "UPDATE portfolio SET status = ?, sold_at = ?, sell_price = ? WHERE id = ?",
                 (status, sold_at, sell_price, id),
             )
         else:
@@ -327,7 +329,7 @@ class Database:
         """Return portfolio items with status 'held' or 'listed'."""
         conn = self._get_conn()
         rows = conn.execute(
-            "SELECT id, player_name, buy_price, listed_price, status, acquired_at, listed_at, sold_at "
+            "SELECT id, player_name, buy_price, listed_price, sell_price, status, acquired_at, listed_at, sold_at "
             "FROM portfolio WHERE status IN ('held', 'listed') ORDER BY acquired_at DESC"
         ).fetchall()
         return [
@@ -336,6 +338,7 @@ class Database:
                 player_name=row["player_name"],
                 buy_price=row["buy_price"],
                 listed_price=row["listed_price"],
+                sell_price=row["sell_price"],
                 status=row["status"],
                 acquired_at=_iso_to_dt(row["acquired_at"]) or datetime.now(timezone.utc),
                 listed_at=_iso_to_dt(row["listed_at"]),
@@ -348,7 +351,7 @@ class Database:
         """Return aggregate summary of portfolio (cost, value, counts, profit, ROI)."""
         conn = self._get_conn()
         rows = conn.execute(
-            "SELECT status, buy_price, listed_price, sold_at FROM portfolio"
+            "SELECT status, buy_price, listed_price, sell_price, sold_at FROM portfolio"
         ).fetchall()
         total_cost = 0
         total_listed_value = 0
@@ -368,14 +371,14 @@ class Database:
                 total_listed_value += listed
             elif status == "sold":
                 count_sold += 1
-                total_sold_value += listed  # stored as sell price when sold
+                total_sold_value += row["sell_price"] or 0  # stored as sell price when sold
         # EA tax: net_received = sell_price * 0.95; profit = net_received - buy_price
         total_profit = 0
         total_invested_sold = 0
         for r in rows:
             if r["status"] == "sold":
                 buy = r["buy_price"] or 0
-                sell = r["listed_price"] or 0
+                sell = r["sell_price"] or 0
                 total_invested_sold += buy
                 total_profit += int(sell * 0.95) - buy
         roi_pct = (
@@ -435,3 +438,10 @@ class Database:
             (player_name, player_name, max_records),
         )
         conn.commit()
+
+    def close(self) -> None:
+    """Close the SQLite connection if open. Call this in tests and on shutdown."""
+    if self._conn is not None:
+        self._conn.close()
+        self._conn = None
+        logger.debug("Database connection closed")

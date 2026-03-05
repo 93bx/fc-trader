@@ -57,6 +57,7 @@ class PortfolioItem:
     status: str
     acquired_at: datetime
     listed_price: Optional[int] = None
+    sell_price: Optional[int] = None
     listed_at: Optional[datetime] = None
     sold_at: Optional[datetime] = None
     id: Optional[int] = None
