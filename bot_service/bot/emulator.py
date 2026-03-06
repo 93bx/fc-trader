@@ -45,7 +45,7 @@ class Emulator:
         ]
         if self._cfg.headless:
             cmd.extend(["-no-window"])
-        logger.info("Starting AVD: %s", " ".join(cmd))
+        logger.info("Starting AVD: {}", " ".join(cmd))
         self._process = subprocess.Popen(
             cmd,
             stdout=subprocess.DEVNULL,
@@ -71,16 +71,16 @@ class Emulator:
                     timeout=10,
                 )
                 if out.stdout and "1" in out.stdout.strip():
-                    logger.info("AVD boot completed in %.0fs", time.monotonic() - start)
+                    logger.info("AVD boot completed in {:.0f}s", time.monotonic() - start)
                     return True
             except (subprocess.TimeoutExpired, FileNotFoundError, RuntimeError) as e:
-                logger.debug("Boot poll failed: %s", e)
+                logger.debug("Boot poll failed: {}", e)
             now = time.monotonic()
             if now - last_log >= 30:
-                logger.info("Waiting for AVD boot... %.0fs elapsed", now - start)
+                logger.info("Waiting for AVD boot... {:.0f}s elapsed", now - start)
                 last_log = now
             time.sleep(5)
-        logger.error("AVD boot timeout after %ds", self._cfg.boot_timeout)
+        logger.error("AVD boot timeout after {}s", self._cfg.boot_timeout)
         return False
 
     def _unlock_screen(self) -> None:
@@ -98,7 +98,7 @@ class Emulator:
                 timeout=10,
             )
         except (subprocess.TimeoutExpired, FileNotFoundError) as e:
-            logger.debug("Unlock swipe failed: %s", e)
+            logger.debug("Unlock swipe failed: {}", e)
 
     def install_apk(self, path: str) -> bool:
         """Install APK with adb install -r -d. Return True if output contains Success."""
@@ -110,12 +110,12 @@ class Emulator:
                 timeout=120,
             )
             if "Success" in (out.stdout or "") or "Success" in (out.stderr or ""):
-                logger.info("APK installed: %s", path)
+                logger.info("APK installed: {}", path)
                 return True
-            logger.error("APK install failed: %s", out.stderr or out.stdout)
+            logger.error("APK install failed: {}", out.stderr or out.stdout)
             return False
         except (subprocess.TimeoutExpired, FileNotFoundError) as e:
-            logger.error("APK install error: %s", e)
+            logger.error("APK install error: {}", e)
             return False
 
     def is_running(self) -> bool:
@@ -145,7 +145,7 @@ class Emulator:
             self._adb("shell", "monkey", "-p", package, "-c", "android.intent.category.LAUNCHER", "1")
             return True
         except RuntimeError as e:
-            logger.error("Launch app failed: %s", e)
+            logger.error("Launch app failed: {}", e)
             return False
 
     def stop(self) -> None:
@@ -157,12 +157,12 @@ class Emulator:
                 timeout=15,
             )
         except (subprocess.TimeoutExpired, FileNotFoundError) as e:
-            logger.debug("adb emu kill: %s", e)
+            logger.debug("adb emu kill: {}", e)
         if self._process and self._process.poll() is None:
             try:
                 pgid = os.getpgid(self._process.pid)  # type: ignore[union-attr]
                 os.killpg(pgid, 9)
             except (ProcessLookupError, OSError, AttributeError) as e:
-                logger.debug("Kill process group: %s", e)
+                logger.debug("Kill process group: {}", e)
             self._process = None
         logger.info("Emulator stopped")

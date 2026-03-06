@@ -38,10 +38,10 @@ class Device:
         try:
             self._d = u2.connect()
             info = self._d.info if hasattr(self._d, "info") else {}
-            logger.info("Device connected: %s", info.get("productName", "android"))
+            logger.info("Device connected: {}", info.get("productName", "android"))
             return True
         except Exception as e:
-            logger.error("Device connect failed: %s", e)
+            logger.error("Device connect failed: {}", e)
             return False
 
     def _human_delay(self) -> None:
