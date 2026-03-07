@@ -1,12 +1,14 @@
 # Secrets and local config — never commit
 .env
 bot_service/config/config.yaml
+web_service/config/web_config.yaml
 config/config.yaml
 
 # Database and runtime
 *.db
 logs/
 apk/
+browser_profile/
 
 # Python
 __pycache__/

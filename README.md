@@ -1,19 +1,21 @@
 # FC Trader
 
-Fully automated trading bot for the **EA Sports FC 26 Companion** Android app. It runs inside Docker with a headless Android emulator, logs into EA, and runs three market strategies (Sniper, Mass Bidder, Chemistry Style Trader) driven by a real-time market calendar and an intel sidecar that scrapes FUTWIZ, FUTBIN, and FUT.GG.
+Fully automated trading bot for the **EA Sports FC 26 Ultimate Team Web App** (primary) and FC 26 Companion Android app (failover). Runs inside Docker, executes three trading strategies (Sniper, Mass Bidder, Chemistry Style Trader) via Playwright browser automation with KSA-Riyadh anti-detection, and is driven by a real-time market calendar and intel sidecar that scrapes FUTWIZ, FUTBIN, and FUT.GG.
+
+**Default mode: Web App (Playwright).** The Android emulator is available as failover only. See [docs/WEB_APP.md](docs/WEB_APP.md) and [docs/ANTI_DETECTION.md](docs/ANTI_DETECTION.md).
 
 ---
 
 ## Prerequisites
 
-- **Linux** (or WSL2 with KVM support). The bot service uses an Android emulator that requires KVM for acceptable performance.
-- **KVM** enabled on the host (`kvm-ok` must succeed). See [docs/SETUP.md](docs/SETUP.md).
-- **Docker** and **Docker Compose**.
-- **FC Companion APK**: Obtain the EA Sports FC 26 Companion app from the official source (Google Play or equivalent). Place the `.apk` file in the `apk/` directory (or set `FC_APK_PATH` to its path).
+- **Docker** and **Docker Compose** (v2+).
+- **EA Account** with Transfer Market already unlocked (Graduated Access — returning FC 25 player). See [docs/WEB_APP.md](docs/WEB_APP.md#1-prerequisites).
+- **For Android failover only:** Linux or WSL2 with KVM. See [docs/SETUP.md](docs/SETUP.md).
+- **Residential SA proxy** (optional but recommended for production). See [docs/ANTI_DETECTION.md](docs/ANTI_DETECTION.md).
 
 ---
 
-## Quick start
+## Quick start (Web mode — default)
 
 1. **Clone the repo**
    ```bash
@@ -21,26 +23,34 @@ Fully automated trading bot for the **EA Sports FC 26 Companion** Android app. I
    cd fc-trader
    ```
 
-2. **Place the APK**  
-   Copy the FC Companion APK into `apk/` (e.g. `apk/com.ea.gp.futmobile.apk`).
-
-3. **Configure environment**  
-   Copy `.env.example` to `.env` and set your EA credentials (use a secondary account, never your main):
+2. **Configure environment**  
+   Copy `.env.example` to `.env` and fill in your EA credentials:
    ```bash
    cp .env.example .env
    # Edit .env: set FC_EMAIL and FC_PASSWORD
+   # COMPOSE_PROFILES=web is already the default
    ```
 
-4. **Config (optional)**  
-   Ensure `bot_service/config/config.yaml` exists (e.g. copy from the repo; it is gitignored). Add player names under `sniper.players`, `mass_bidder.players`, or `chem_style.players` as needed. Env overrides: `FC_STRATEGY`, `FC_LOG_LEVEL`, `FC_PLATFORM`.
+3. **Configure players** (optional)  
+   Edit `web_service/config/web_config.yaml` and add player names under `sniper.players`, `mass_bidder.players`, or `chem_style.players`.
 
-5. **Run**
+4. **Run**
    ```bash
    docker compose up -d
-   # Or: docker-compose up -d
    ```
-   For first-time testing, run in dry-run:  
-   `docker compose run --rm fc-trader --dry-run`
+   Web trader starts automatically (profile `web` is the default).  
+   For dry-run testing: `docker compose run --rm web-trader --dry-run`
+
+5. **First login / 2FA**  
+   On first run, if 2FA is triggered you have `ea.login_timeout` seconds (default 180s) to complete it. Check your email or authenticator app and approve. Subsequent runs reuse saved cookies.
+
+### Android failover mode
+
+```bash
+FC_EXECUTION_MODE=android COMPOSE_PROFILES=android docker compose up -d fc-trader intel
+```
+
+Requires KVM. Place the FC Companion APK in `apk/`.
 
 ---
 

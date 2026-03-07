@@ -1,4 +1,30 @@
 services:
+  web-trader:
+    build: ./web_service
+    image: fc-trader-web:latest
+    container_name: fc-trader-web
+    mem_limit: 2g
+    cpus: "2"
+    env_file: .env
+    volumes:
+      - ./web_service/config:/app/config
+      - ./logs:/app/logs
+      - shared-data:/app/data
+    healthcheck:
+      test: ["CMD", "test", "-f", "/app/data/web_heartbeat"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    logging:
+      driver: json-file
+      options:
+        max-size: 50m
+        max-file: "5"
+    restart: unless-stopped
+    profiles:
+      - web
+
   fc-trader:
     build: ./bot_service
     image: fc-trader:latest

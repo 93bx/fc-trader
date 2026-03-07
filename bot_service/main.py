@@ -124,6 +124,36 @@ def main() -> None:
         sys.exit(1)
     _setup_logging(cfg.log_level)
 
+    execution_mode = os.environ.get("FC_EXECUTION_MODE", getattr(cfg, "execution_mode", "android")).lower()
+    if execution_mode == "web":
+        logger.info("Execution mode: WEB (default). Android service inactive.")
+        sys.exit(0)
+
+    android_stealth = None
+    try:
+        from anti_detect.android_stealth import AndroidKSAStealth
+        from web.config_loader import AntiDetectConfig as WebAD, GeolocationConfig, ProxyConfig
+        web_ad = WebAD(
+            profile="ksa_riyadh_win11", timezone="Asia/Riyadh", locale="ar-SA",
+            accept_language="ar-SA", platform="Win32", os_version="10.0",
+            screen_width=1920, screen_height=1080, avail_width=1920, avail_height=1040,
+            color_depth=24, pixel_ratio=1.0, device_memory=8, hardware_concurrency=8,
+            user_agent="", webgl_vendor="", webgl_renderer="", canvas_noise=True,
+            audio_noise=True,
+            geolocation=GeolocationConfig(latitude=24.6877, longitude=46.7219, accuracy=25.0),
+            proxy=ProxyConfig(enabled=False, proxy_type="residential", country_code="SA",
+                              city="Riyadh", rotate_every_n_sessions=1, pool=[]),
+            action_delay_min=0.3, action_delay_max=0.8, typing_delay_min=0.07,
+            typing_delay_max=0.21, scroll_pause_min=0.5, scroll_pause_max=1.5,
+            page_load_pause_min=2.0, page_load_pause_max=5.0, idle_drift_min=240,
+            idle_drift_max=900, session_max_duration=5400, daily_active_hours_max=6.0,
+        )
+        android_stealth = AndroidKSAStealth(web_ad)
+        android_stealth.apply(cfg.emulator.avd_port)
+        logger.info("Android KSA stealth profile applied.")
+    except Exception as exc:
+        logger.debug("Android KSA stealth not applied (optional): {}", exc)
+
     apk_path = _find_apk(DEFAULT_APK_DIR)
     if not apk_path:
         logger.error(
